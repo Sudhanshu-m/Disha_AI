@@ -1,11 +1,20 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import "dotenv/config"; // ensures .env variables are loaded
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Debug log for env key loading (only in dev, mask sensitive info)
+if (process.env.NODE_ENV !== "production") {
+  const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  log(`[ENV] Gemini key loaded: ${key ? key.slice(0, 6) + "..." : "MISSING"}`);
+  log(`[ENV] Database URL: ${process.env.DATABASE_URL ? "✅ loaded" : "❌ missing"}`);
+}
+
+// API logging middleware
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -25,8 +34,8 @@ app.use((req, res, next) => {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
+      if (logLine.length > 120) {
+        logLine = logLine.slice(0, 119) + "…";
       }
 
       log(logLine);
@@ -44,29 +53,21 @@ app.use((req, res, next) => {
     const message = err.message || "Internal Server Error";
 
     res.status(status).json({ message });
-    throw err;
+    console.error("[SERVER ERROR]", err);
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // Setup frontend
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
     serveStatic(app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
+  const port = parseInt(process.env.PORT || "5000", 10);
   server.listen(
-    {
-      port,
-      host: "localhost",   // or "127.0.0.1"
-    },
+    { port, host: "0.0.0.0" }, // 👈 change from "localhost" so it's reachable in all environments
     () => {
-      log(`serving on http://localhost:${port}`);
+      log(`🚀 Serving on http://localhost:${port}`);
     }
-  );})();
+  );
+})();

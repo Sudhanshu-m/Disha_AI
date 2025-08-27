@@ -15,25 +15,24 @@ export default function Profile() {
   const { toast } = useToast();
 
   // Get user ID from localStorage - in a real app, this would come from authentication
-  const userId = localStorage.getItem('currentUserId') || 'temp-user-id';
+  const userId = localStorage.getItem("currentUserId") || "temp-user-id";
 
   const { data: profile, isLoading } = useQuery<StudentProfile>({
-    queryKey: ['/api/profile', userId],
+    queryKey: ["/api/profile", userId],
     enabled: !!userId,
   });
 
+  // Generate matches after creating/updating profile
   const generateMatchesMutation = useMutation({
-    mutationFn: async () => {
-      return await apiRequest("POST", "/api/matches/generate", {
-        profileId: profile?.id
-      });
+    mutationFn: async (profileId: string) => {
+      return await apiRequest("POST", "/api/matches/generate", { profileId });
     },
     onSuccess: () => {
       toast({
         title: "Matches Updated",
         description: "Your scholarship matches have been refreshed based on your updated profile.",
       });
-      queryClient.invalidateQueries({ queryKey: ['/api/matches'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches"] });
     },
     onError: (error) => {
       console.error("Match generation error:", error);
@@ -45,11 +44,16 @@ export default function Profile() {
     },
   });
 
-  const handleProfileUpdate = () => {
+  // Called after profile is created or updated
+  const handleProfileUpdate = (newProfile?: StudentProfile) => {
     setIsEditing(false);
-    // Generate new matches when profile is updated
-    if (profile?.id) {
-      generateMatchesMutation.mutate();
+
+    if (newProfile?.id) {
+      // ✅ Save ID so Matches page knows which profile to use
+      localStorage.setItem("currentProfileId", newProfile.id.toString());
+
+      // Generate matches for this profile
+      generateMatchesMutation.mutate(newProfile.id.toString());
     }
   };
 
@@ -59,7 +63,9 @@ export default function Profile() {
         <Navigation />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-800 mb-4">Loading your profile...</h2>
+            <h2 className="text-2xl font-bold text-slate-800 mb-4">
+              Loading your profile...
+            </h2>
           </div>
         </div>
       </div>
@@ -73,9 +79,12 @@ export default function Profile() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <Card>
             <CardContent className="p-12 text-center">
-              <h2 className="text-2xl font-bold text-slate-800 mb-4">Create Your Profile</h2>
+              <h2 className="text-2xl font-bold text-slate-800 mb-4">
+                Create Your Profile
+              </h2>
               <p className="text-slate-600 mb-6">
-                You haven't created a profile yet. Let's get started to find your perfect scholarship matches!
+                You haven't created a profile yet. Let's get started to find your
+                perfect scholarship matches!
               </p>
               <Button onClick={() => setIsEditing(true)} data-testid="button-create-profile">
                 Create Profile
@@ -100,6 +109,7 @@ export default function Profile() {
               Keep your information current to get the best scholarship matches
             </p>
           </div>
+          {/* ✅ Pass back the saved profile object to handleProfileUpdate */}
           <ProfileForm onComplete={handleProfileUpdate} />
         </div>
       </div>
@@ -109,17 +119,19 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Navigation />
-      
+
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 mb-4">Your Profile</h1>
-            <p className="text-lg text-slate-600">Manage your academic and personal information</p>
+            <p className="text-lg text-slate-600">
+              Manage your academic and personal information
+            </p>
           </div>
           <div className="space-x-4">
-            <Button 
+            <Button
               variant="outline"
-              onClick={() => generateMatchesMutation.mutate()}
+              onClick={() => profile?.id && generateMatchesMutation.mutate(profile.id.toString())}
               disabled={generateMatchesMutation.isPending}
               data-testid="button-refresh-matches"
             >
@@ -164,7 +176,7 @@ export default function Profile() {
               <div>
                 <label className="text-sm font-medium text-slate-700">Education Level</label>
                 <p className="text-slate-800 mt-1" data-testid="text-profile-education-level">
-                  {profile?.educationLevel?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  {profile?.educationLevel?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
                 </p>
               </div>
               <div>
@@ -222,48 +234,30 @@ export default function Profile() {
                 <label className="text-sm font-medium text-slate-700">Financial Need</label>
                 <div className="flex items-center space-x-2 mt-1">
                   <DollarSign className="w-4 h-4 text-slate-500" />
-                  <Badge 
-                    variant="secondary" 
+                  <Badge
+                    variant="secondary"
                     className={
-                      profile?.financialNeed === 'critical' ? 'bg-red-100 text-red-800' :
-                      profile?.financialNeed === 'high' ? 'bg-orange-100 text-orange-800' :
-                      profile?.financialNeed === 'moderate' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-green-100 text-green-800'
+                      profile?.financialNeed === "critical"
+                        ? "bg-red-100 text-red-800"
+                        : profile?.financialNeed === "high"
+                        ? "bg-orange-100 text-orange-800"
+                        : profile?.financialNeed === "moderate"
+                        ? "bg-yellow-100 text-yellow-800"
+                        : "bg-green-100 text-green-800"
                     }
                     data-testid="badge-financial-need"
                   >
-                    {profile?.financialNeed ? profile.financialNeed.charAt(0).toUpperCase() + profile.financialNeed.slice(1) : "Not specified"}
+                    {profile?.financialNeed
+                      ? profile.financialNeed.charAt(0).toUpperCase() + profile.financialNeed.slice(1)
+                      : "Not specified"}
                   </Badge>
                 </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-slate-700">Location Preference</label>
                 <p className="text-slate-800 mt-1" data-testid="text-profile-location">
-                  {profile?.location?.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  {profile?.location?.replace(/-/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())}
                 </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Profile Stats */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Profile Stats</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600" data-testid="stat-profile-completeness">95%</div>
-                  <p className="text-sm text-slate-600">Profile Complete</p>
-                </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <div className="text-2xl font-bold text-green-600" data-testid="stat-last-updated">2</div>
-                  <p className="text-sm text-slate-600">Days Since Update</p>
-                </div>
-                <div className="text-center p-4 bg-purple-50 rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600" data-testid="stat-match-potential">High</div>
-                  <p className="text-sm text-slate-600">Match Potential</p>
-                </div>
               </div>
             </CardContent>
           </Card>

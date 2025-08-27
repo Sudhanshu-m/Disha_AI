@@ -1,329 +1,308 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { 
-  insertStudentProfileSchema, 
-  insertScholarshipSchema,
-  type StudentProfile,
-  type Scholarship 
+import { db } from "./db";
+import {
+  studentProfiles,
+  scholarships,
+  scholarshipMatches,
+  applicationGuidance,
+  insertStudentProfileSchema,
+  type InsertScholarship,
 } from "@shared/schema";
-import { generateScholarshipMatches, generateApplicationGuidance } from "./services/gemini";
+import { eq, and, desc } from "drizzle-orm";
+import {
+  generateScholarshipMatches,
+  generateApplicationGuidance,
+} from "./services/gemini";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Get student profile by user ID
+  // =========================
+  // PROFILES
+  // =========================
+
+  // Get profile by userId
   app.get("/api/profile/:userId", async (req, res) => {
     try {
-      const profile = await storage.getStudentProfile(req.params.userId);
-      if (!profile) {
-        return res.status(404).json({ message: "Profile not found" });
-      }
+      const profile = await db.query.studentProfiles.findFirst({
+        where: (p, { eq }) => eq(p.userId, req.params.userId),
+      });
+      if (!profile) return res.status(404).json({ message: "Profile not found" });
       res.json(profile);
-    } catch (error) {
-      console.error("Error fetching profile:", error);
+    } catch (err) {
+      console.error("Error fetching profile:", err);
       res.status(500).json({ message: "Failed to fetch profile" });
     }
   });
 
-  // Get student profile by profile ID
+  // Get profile by profileId
   app.get("/api/profile/id/:profileId", async (req, res) => {
     try {
-      const profile = await storage.getStudentProfileById(req.params.profileId);
-      if (!profile) {
-        return res.status(404).json({ message: "Profile not found" });
-      }
+      const profile = await db.query.studentProfiles.findFirst({
+        where: (p, { eq }) => eq(p.id, req.params.profileId),
+      });
+      if (!profile) return res.status(404).json({ message: "Profile not found" });
       res.json(profile);
-    } catch (error) {
-      console.error("Error fetching profile:", error);
+    } catch (err) {
+      console.error("Error fetching profile:", err);
       res.status(500).json({ message: "Failed to fetch profile" });
     }
   });
 
-  // Create student profile
+  // Create new profile
   app.post("/api/profile", async (req, res) => {
     try {
-      console.log("Creating profile with data:", req.body);
-      
       const profileData = insertStudentProfileSchema.parse(req.body.profile);
       const userId = req.body.userId;
-      
-      if (!userId) {
-        return res.status(400).json({ message: "User ID is required" });
-      }
+      if (!userId) return res.status(400).json({ message: "User ID is required" });
 
-      // Check if user exists, create if not
-      let user = await storage.getUserByUsername(userId);
-      if (!user) {
-        user = await storage.createUser({
-          username: userId,
-          password: "temp-password" // In a real app, this would be properly handled
-        });
-      }
+      const [profile] = await db
+        .insert(studentProfiles)
+        .values({ userId, ...profileData })
+        .returning();
 
-      const profile = await storage.createStudentProfile({
-        ...profileData,
-        userId: user.id
-      });
-
-      console.log("Profile created successfully:", profile);
-      res.json(profile);
-    } catch (error: any) {
-      console.error("Error creating profile:", error);
-      res.status(500).json({ message: "Failed to create profile", error: error.message });
+      res.status(201).json(profile);
+    } catch (err: any) {
+      console.error("Error creating profile:", err);
+      res
+        .status(500)
+        .json({ message: "Failed to create profile", error: err.message });
     }
   });
 
-  // Update student profile
+  // Update profile
   app.put("/api/profile/:id", async (req, res) => {
     try {
       const profileData = insertStudentProfileSchema.partial().parse(req.body);
-      const profile = await storage.updateStudentProfile(req.params.id, profileData);
+      const [profile] = await db
+        .update(studentProfiles)
+        .set(profileData)
+        .where(eq(studentProfiles.id, req.params.id))
+        .returning();
+
+      if (!profile) return res.status(404).json({ message: "Profile not found" });
       res.json(profile);
-    } catch (error) {
-      console.error("Error updating profile:", error);
+    } catch (err) {
+      console.error("Error updating profile:", err);
       res.status(500).json({ message: "Failed to update profile" });
     }
   });
 
-  // Seed sample data endpoint
-  app.post("/api/seed-data", async (req, res) => {
-    try {
-      await storage.seedSampleData();
-      res.json({ message: "Sample data seeded successfully" });
-    } catch (error) {
-      console.error("Error seeding data:", error);
-      res.status(500).json({ message: "Failed to seed sample data" });
-    }
-  });
+  // =========================
+  // SCHOLARSHIPS
+  // =========================
 
-  // Get all scholarships
-  app.get("/api/scholarships", async (req, res) => {
+  app.get("/api/scholarships", async (_req, res) => {
     try {
-      const scholarships = await storage.getAllScholarships();
-      res.json(scholarships);
-    } catch (error) {
-      console.error("Error fetching scholarships:", error);
+      const all = await db.select().from(scholarships);
+      res.json(all);
+    } catch (err) {
+      console.error("Error fetching scholarships:", err);
       res.status(500).json({ message: "Failed to fetch scholarships" });
     }
   });
 
-  // Search scholarships with filters
-  app.get("/api/scholarships/search", async (req, res) => {
+  app.post("/api/seed/scholarships", async (_req, res) => {
     try {
-      const filters = {
-        type: req.query.type as string,
-        tags: req.query.tags ? (req.query.tags as string).split(",") : undefined,
-        fieldOfStudy: req.query.fieldOfStudy as string,
-        educationLevel: req.query.educationLevel as string,
-      };
-
-      const scholarships = await storage.searchScholarships(filters);
-      res.json(scholarships);
-    } catch (error) {
-      console.error("Error searching scholarships:", error);
-      res.status(500).json({ message: "Failed to search scholarships" });
-    }
-  });
-
-  // Generate AI-powered scholarship matches
-  app.post("/api/matches/generate", async (req, res) => {
-    try {
-      const { profileId } = req.body;
-      
-      if (!profileId) {
-        return res.status(400).json({ message: "Profile ID is required" });
-      }
-
-      const profile = await storage.getStudentProfileById(profileId);
-      if (!profile) {
-        return res.status(404).json({ message: "Profile not found" });
-      }
-
-      const scholarships = await storage.getAllScholarships();
-      const matches = await generateScholarshipMatches(profile, scholarships);
-
-      // Save matches to database
-      const savedMatches = [];
-      for (const match of matches) {
-        if (match.matchScore >= 50) { // Only save matches above 50%
-          const savedMatch = await storage.createScholarshipMatch({
-            profileId,
-            scholarshipId: match.scholarshipId,
-            matchScore: match.matchScore,
-            aiReasoning: match.reasoning
-          });
-          savedMatches.push(savedMatch);
-        }
-      }
-
-      res.json({ matches: savedMatches });
-    } catch (error) {
-      console.error("Error generating matches:", error);
-      res.status(500).json({ message: "Failed to generate matches" });
-    }
-  });
-
-  // Get scholarship matches for a profile
-  app.get("/api/matches/:profileId", async (req, res) => {
-    try {
-      const matches = await storage.getScholarshipMatches(req.params.profileId);
-      res.json(matches);
-    } catch (error) {
-      console.error("Error fetching matches:", error);
-      res.status(500).json({ message: "Failed to fetch matches" });
-    }
-  });
-
-  // Update match status (favorite, applied, etc.)
-  app.put("/api/matches/:matchId/status", async (req, res) => {
-    try {
-      const { status } = req.body;
-      const updatedMatch = await storage.updateMatchStatus(req.params.matchId, status);
-      res.json(updatedMatch);
-    } catch (error) {
-      console.error("Error updating match status:", error);
-      res.status(500).json({ message: "Failed to update match status" });
-    }
-  });
-
-  // Generate application guidance
-  app.post("/api/guidance", async (req, res) => {
-    try {
-      const { profileId, scholarshipId } = req.body;
-
-      if (!profileId || !scholarshipId) {
-        return res.status(400).json({ message: "Profile ID and Scholarship ID are required" });
-      }
-
-      // Check if guidance already exists
-      const existingGuidance = await storage.getApplicationGuidance(profileId, scholarshipId);
-      if (existingGuidance) {
-        return res.json(existingGuidance);
-      }
-
-      const profile = await storage.getStudentProfile(profileId);
-      const scholarship = await storage.getScholarshipById(scholarshipId);
-
-      if (!profile || !scholarship) {
-        return res.status(404).json({ message: "Profile or scholarship not found" });
-      }
-
-      const guidance = await generateApplicationGuidance(profile, scholarship);
-      
-      const savedGuidance = await storage.createApplicationGuidance({
-        profileId,
-        scholarshipId,
-        essayTips: guidance.essayTips,
-        checklist: guidance.checklist,
-        improvementSuggestions: guidance.improvementSuggestions
-      });
-
-      res.json(savedGuidance);
-    } catch (error) {
-      console.error("Error generating guidance:", error);
-      res.status(500).json({ message: "Failed to generate guidance" });
-    }
-  });
-
-  // Get application guidance
-  app.get("/api/guidance/:profileId/:scholarshipId", async (req, res) => {
-    try {
-      const guidance = await storage.getApplicationGuidance(
-        req.params.profileId,
-        req.params.scholarshipId
-      );
-      
-      if (!guidance) {
-        return res.status(404).json({ message: "Guidance not found" });
-      }
-
-      res.json(guidance);
-    } catch (error) {
-      console.error("Error fetching guidance:", error);
-      res.status(500).json({ message: "Failed to fetch guidance" });
-    }
-  });
-
-  // Seed initial scholarship data (for development)
-  app.post("/api/seed/scholarships", async (req, res) => {
-    try {
-      const seedScholarships = [
+      const seed: InsertScholarship[] = [
         {
           title: "National Merit STEM Scholarship",
           organization: "Future Scientists Foundation",
           amount: "$15,000",
           deadline: "2024-03-15",
-          description: "Supporting outstanding students pursuing STEM degrees with demonstrated academic excellence and research potential.",
-          requirements: "Minimum 3.7 GPA, STEM major, research experience preferred, US citizen or permanent resident",
-          tags: ["STEM", "Merit-Based", "Undergraduate", "Research"],
+          description: "Supporting outstanding STEM students.",
+          requirements: "Minimum 3.7 GPA, strong research interest.",
+          tags: ["STEM", "Merit-Based", "Undergraduate"],
           type: "merit-based",
           eligibilityGpa: "3.7",
-          eligibleFields: ["Computer Science", "Engineering", "Mathematics", "Physics", "Chemistry", "Biology"],
-          eligibleLevels: ["undergraduate"]
+          eligibleFields: ["Computer Science", "Engineering"],
+          eligibleLevels: ["undergraduate"],
+          isActive: true,
         },
-        {
-          title: "Tech Diversity Excellence Award",
-          organization: "TechForward Initiative",
-          amount: "$8,500",
-          deadline: "2024-04-01",
-          description: "Promoting diversity in technology fields by supporting underrepresented students with financial aid and mentorship.",
-          requirements: "Technology-related major, demonstrate financial need, underrepresented minority status, minimum 3.0 GPA",
-          tags: ["Technology", "Diversity", "Need-Based", "Mentorship"],
-          type: "need-based",
-          eligibilityGpa: "3.0",
-          eligibleFields: ["Computer Science", "Information Technology", "Software Engineering"],
-          eligibleLevels: ["undergraduate", "graduate"]
-        },
-        {
-          title: "Community Leadership Grant",
-          organization: "Local Community Foundation",
-          amount: "$3,000",
-          deadline: "2024-05-15",
-          description: "Recognizing students who demonstrate exceptional leadership and community service commitment.",
-          requirements: "Minimum 100 hours community service, leadership role in organization, any major, 3.2+ GPA",
-          tags: ["Leadership", "Community Service", "Local"],
-          type: "merit-based",
-          eligibilityGpa: "3.2",
-          eligibleFields: [],
-          eligibleLevels: ["undergraduate"]
-        },
-        {
-          title: "Environmental Innovation Award",
-          organization: "Green Future Initiative",
-          amount: "$12,000",
-          deadline: "2024-06-30",
-          description: "Supporting students developing innovative solutions for environmental challenges and sustainability.",
-          requirements: "Environmental science or related field, research project focused on sustainability, minimum 3.5 GPA",
-          tags: ["Environmental Science", "Innovation", "Research-Based", "Sustainability"],
-          type: "merit-based",
-          eligibilityGpa: "3.5",
-          eligibleFields: ["Environmental Science", "Environmental Engineering", "Renewable Energy", "Biology"],
-          eligibleLevels: ["undergraduate", "graduate"]
-        },
-        {
-          title: "First Generation College Student Support",
-          organization: "Educational Equity Foundation",
-          amount: "$5,000",
-          deadline: "2024-04-30",
-          description: "Supporting first-generation college students with financial aid and academic support services.",
-          requirements: "First-generation college student status, demonstrate financial need, minimum 2.8 GPA",
-          tags: ["First-Generation", "Need-Based", "Academic Support"],
-          type: "need-based",
-          eligibilityGpa: "2.8",
-          eligibleFields: [],
-          eligibleLevels: ["undergraduate"]
-        }
       ];
 
-      for (const scholarshipData of seedScholarships) {
-        await storage.createScholarship(scholarshipData);
+      for (const s of seed) {
+        await db.insert(scholarships).values(s);
       }
 
-      res.json({ message: "Scholarships seeded successfully", count: seedScholarships.length });
-    } catch (error) {
-      console.error("Error seeding scholarships:", error);
+      res.json({ message: "Scholarships seeded successfully", count: seed.length });
+    } catch (err) {
+      console.error("Error seeding scholarships:", err);
       res.status(500).json({ message: "Failed to seed scholarships" });
     }
   });
+
+  // =========================
+  // MATCHES
+  // =========================
+
+  // Generate matches for a profile
+  app.post("/api/matches/generate", async (req, res) => {
+    try {
+      const { profileId } = req.body;
+      if (!profileId)
+        return res.status(400).json({ message: "Profile ID is required" });
+
+      const profile = await db.query.studentProfiles.findFirst({
+        where: (p, { eq }) => eq(p.id, profileId),
+      });
+      if (!profile) return res.status(404).json({ message: "Profile not found" });
+
+      const allScholarships = await db.select().from(scholarships);
+
+      // Call Gemini AI to generate matches
+      const aiMatches = await generateScholarshipMatches(profile, allScholarships);
+
+      const savedMatches: any[] = [];
+
+      for (const match of aiMatches) {
+        const [savedMatch] = await db
+          .insert(scholarshipMatches)
+          .values({
+            profileId,
+            scholarshipId: match.scholarshipId,
+            matchScore: match.matchScore,
+            aiReasoning: match.aiReasoning, // ✅ Gemini returns this
+            status: "pending",
+          })
+          .returning();
+
+        const scholarship = allScholarships.find(
+          (s) => String(s.id) === String(match.scholarshipId)
+        );
+
+        savedMatches.push({ ...savedMatch, scholarship });
+      }
+
+      res.json({ matches: savedMatches });
+    } catch (err) {
+      console.error("Error generating matches:", err);
+      res.status(500).json({ message: "Failed to generate matches" });
+    }
+  });
+
+  // Fetch matches for a profile (with scholarship info)
+  app.get("/api/matches/:profileId", async (req, res) => {
+    try {
+      const matches = await db
+        .select()
+        .from(scholarshipMatches)
+        .where(eq(scholarshipMatches.profileId, req.params.profileId))
+        .orderBy(desc(scholarshipMatches.matchScore));
+
+      const allScholarships = await db.select().from(scholarships);
+
+      const enriched = matches.map((m) => ({
+        ...m,
+        scholarship: allScholarships.find(
+          (s) => String(s.id) === String(m.scholarshipId)
+        ),
+      }));
+
+      res.json(enriched);
+    } catch (err) {
+      console.error("Error fetching matches:", err);
+      res.status(500).json({ message: "Failed to fetch matches" });
+    }
+  });
+
+  // Update match status
+  app.put("/api/matches/:matchId/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      const [updated] = await db
+        .update(scholarshipMatches)
+        .set({ status })
+        .where(eq(scholarshipMatches.id, req.params.matchId))
+        .returning();
+
+      res.json(updated);
+    } catch (err) {
+      console.error("Error updating match status:", err);
+      res.status(500).json({ message: "Failed to update match status" });
+    }
+  });
+
+  // =========================
+  // APPLICATION GUIDANCE
+  // =========================
+
+  app.post("/api/guidance", async (req, res) => {
+    try {
+      const { profileId, scholarshipId } = req.body;
+      if (!profileId || !scholarshipId) {
+        return res
+          .status(400)
+          .json({ message: "Profile ID and Scholarship ID are required" });
+      }
+
+      const existing = await db
+        .select()
+        .from(applicationGuidance)
+        .where(
+          and(
+            eq(applicationGuidance.profileId, profileId),
+            eq(applicationGuidance.scholarshipId, scholarshipId)
+          )
+        );
+      if (existing.length > 0) return res.json(existing[0]);
+
+      const profile = await db.query.studentProfiles.findFirst({
+        where: (p, { eq }) => eq(p.id, profileId),
+      });
+      const scholarship = await db.query.scholarships.findFirst({
+        where: (s, { eq }) => eq(s.id, scholarshipId),
+      });
+      if (!profile || !scholarship) {
+        return res
+          .status(404)
+          .json({ message: "Profile or scholarship not found" });
+      }
+
+      const guidance = await generateApplicationGuidance(profile, scholarship);
+      const [saved] = await db
+        .insert(applicationGuidance)
+        .values({
+          profileId: String(profileId),
+          scholarshipId: String(scholarshipId),
+          essayTips: guidance.essayTips,
+          checklist: guidance.checklist,
+          improvementSuggestions: guidance.improvementSuggestions,
+        })
+        .returning();
+
+      res.json(saved);
+    } catch (err) {
+      console.error("Error generating guidance:", err);
+      res.status(500).json({ message: "Failed to generate guidance" });
+    }
+  });
+
+  app.get("/api/guidance/:profileId/:scholarshipId", async (req, res) => {
+    try {
+      const guidance = await db
+        .select()
+        .from(applicationGuidance)
+        .where(
+          and(
+            eq(applicationGuidance.profileId, req.params.profileId),
+            eq(applicationGuidance.scholarshipId, req.params.scholarshipId)
+          )
+        );
+
+      if (!guidance || guidance.length === 0) {
+        return res.status(404).json({ message: "Guidance not found" });
+      }
+
+      res.json(guidance[0]);
+    } catch (err) {
+      console.error("Error fetching guidance:", err);
+      res.status(500).json({ message: "Failed to fetch guidance" });
+    }
+  });
+
+  // =========================
+  // SERVER
+  // =========================
 
   const httpServer = createServer(app);
   return httpServer;

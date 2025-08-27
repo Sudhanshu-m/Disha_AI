@@ -93,9 +93,9 @@ export const applicationGuidance = pgTable("application_guidance", {
   scholarshipId: varchar("scholarship_id")
     .references(() => scholarships.id)
     .notNull(),
-  essayTips: text("essay_tips"),
-  checklist: jsonb("checklist"),
-  improvementSuggestions: text("improvement_suggestions"),
+  essayTips: text("essay_tips").array(),   // ✅ now a string[]
+  checklist: text("checklist").array(),    // ✅ now a string[]
+  improvementSuggestions: text("improvement_suggestions").array(), // ✅ string[]
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
 });
 

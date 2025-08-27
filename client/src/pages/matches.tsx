@@ -4,7 +4,7 @@ import Navigation from "@/components/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Heart, X, Star, Clock, DollarSign, MapPin, Building2 } from "lucide-react";
+import { Heart, X, Star, Clock, DollarSign, Building2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ScholarshipMatch, Scholarship } from "@shared/schema";
@@ -16,12 +16,37 @@ export default function Matches() {
   const [isDragging, setIsDragging] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const startXRef = useRef(0);
 
-  const profileId = localStorage.getItem('currentProfileId') || 'demo-profile';
+  const profileId = localStorage.getItem("currentProfileId");
 
-  const { data: matches, isLoading } = useQuery<(ScholarshipMatch & { scholarship: Scholarship })[]>({
-    queryKey: ['/api/matches', profileId],
+  if (!profileId) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        <Navigation />
+        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">No Profile Found</h2>
+          <p className="text-slate-600 mb-8">
+            Please create your profile first to start generating scholarship matches.
+          </p>
+          <Button onClick={() => (window.location.href = "/profile")}>
+            Create Profile
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const { data: matches = [], isLoading, refetch } = useQuery<
+    (ScholarshipMatch & { scholarship: Scholarship })[]
+  >({
+    queryKey: ["/api/matches", profileId],
     enabled: !!profileId,
+    queryFn: async () => {
+      const res = await fetch(`/api/matches/${profileId}`);
+      const data = await res.json();
+      return data || [];
+    },
   });
 
   const updateMatchMutation = useMutation({
@@ -29,167 +54,113 @@ export default function Matches() {
       return await apiRequest("PUT", `/api/matches/${matchId}/status`, { status });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/matches', profileId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/matches", profileId] });
     },
   });
 
-  const handleSwipe = (direction: 'left' | 'right') => {
+  // New mutation to delete all matches
+  const deleteMatchesMutation = useMutation({
+    mutationFn: async () => {
+      return await apiRequest("DELETE", `/api/matches/all`, {});
+    },
+    onSuccess: () => {
+      // After deleting, refetch to generate new matches
+      refetch();
+    },
+  });
+
+  const handleGenerateMatches = () => {
+    // Call the delete mutation first, which will then trigger the refetch to generate new matches
+    deleteMatchesMutation.mutate();
+    setCurrentIndex(0); // Reset the card index
+  };
+
+  const handleSwipe = (direction: "left" | "right") => {
     if (!matches || currentIndex >= matches.length || isAnimating) return;
 
     setIsAnimating(true);
     const currentMatch = matches[currentIndex];
 
-    // Update match status based on swipe direction
-    const status = direction === 'right' ? 'favorited' : 'passed';
+    const status = direction === "right" ? "favorited" : "passed";
     updateMatchMutation.mutate({ matchId: currentMatch.id, status });
 
-    // Show feedback toast
-    if (direction === 'right') {
-      toast({
-        title: "Great Choice! 💚",
-        description: `You liked ${currentMatch.scholarship.title}`,
-      });
-    } else {
-      toast({
-        title: "Passed",
-        description: "We'll find you better matches!",
-      });
-    }
+    toast({
+      title: direction === "right" ? "Great Choice! 💚" : "Passed",
+      description:
+        direction === "right"
+          ? `You liked ${currentMatch.scholarship.title}`
+          : "We'll find you better matches!",
+    });
 
-    // Move to next card after animation
     setTimeout(() => {
-      setCurrentIndex(prev => prev + 1);
+      setCurrentIndex((prev) => prev + 1);
       setIsAnimating(false);
+      setDragOffset(0);
     }, 300);
   };
 
-  const handleKeyPress = (event: KeyboardEvent) => {
-    if (event.key === 'ArrowLeft') {
-      handleSwipe('left');
-    } else if (event.key === 'ArrowRight') {
-      handleSwipe('right');
-    }
-  };
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setIsDragging(true);
-    const touch = e.touches[0];
-    cardRef.current?.setAttribute('data-start-x', touch.clientX.toString());
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging || !cardRef.current) return;
-
-    const touch = e.touches[0];
-    const startX = parseFloat(cardRef.current.getAttribute('data-start-x') || '0');
-    const currentX = touch.clientX;
-    const offset = currentX - startX;
-
-    setDragOffset(offset);
-  };
-
-  const handleTouchEnd = () => {
+  const handleMove = (clientX: number) => {
     if (!isDragging) return;
+    const newOffset = clientX - startXRef.current;
+    setDragOffset(newOffset);
+  };
 
+  const handleEnd = () => {
     setIsDragging(false);
-
-    // Determine swipe direction based on offset
-    if (Math.abs(dragOffset) > 100) {
-      if (dragOffset > 0) {
-        handleSwipe('right');
-      } else {
-        handleSwipe('left');
-      }
+    if (dragOffset > 100) {
+      handleSwipe("right");
+    } else if (dragOffset < -100) {
+      handleSwipe("left");
+    } else {
+      setDragOffset(0);
     }
-
-    setDragOffset(0);
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     setIsDragging(true);
-    cardRef.current?.setAttribute('data-start-x', e.clientX.toString());
-    e.preventDefault();
+    startXRef.current = e.clientX;
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging || !cardRef.current) return;
-
-    const startX = parseFloat(cardRef.current.getAttribute('data-start-x') || '0');
-    const currentX = e.clientX;
-    const offset = currentX - startX;
-
-    setDragOffset(offset);
-  };
-
-  const handleMouseUp = () => {
-    if (!isDragging) return;
-
-    setIsDragging(false);
-
-    // Determine swipe direction based on offset
-    if (Math.abs(dragOffset) > 100) {
-      if (dragOffset > 0) {
-        handleSwipe('right');
-      } else {
-        handleSwipe('left');
-      }
-    }
-
-    setDragOffset(0);
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    startXRef.current = e.touches[0].clientX;
   };
 
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [currentIndex, matches, isAnimating]);
+    const onMouseMove = (e: MouseEvent) => handleMove(e.clientX);
+    const onMouseUp = () => handleEnd();
+    const onTouchMove = (e: TouchEvent) => handleMove(e.touches[0].clientX);
+    const onTouchEnd = () => handleEnd();
 
-  useEffect(() => {
-    const handleGlobalMouseMove = (e: MouseEvent) => {
-      if (!isDragging || !cardRef.current) return;
-
-      const startX = parseFloat(cardRef.current.getAttribute('data-start-x') || '0');
-      const currentX = e.clientX;
-      const offset = currentX - startX;
-
-      setDragOffset(offset);
-    };
-
-    const handleGlobalMouseUp = () => {
-      if (!isDragging) return;
-
-      setIsDragging(false);
-
-      // Determine swipe direction based on offset
-      if (Math.abs(dragOffset) > 100) {
-        if (dragOffset > 0) {
-          handleSwipe('right');
-        } else {
-          handleSwipe('left');
-        }
-      }
-
-      setDragOffset(0);
-    };
-
-    if (isDragging) {
-      window.addEventListener('mousemove', handleGlobalMouseMove);
-      window.addEventListener('mouseup', handleGlobalMouseUp);
-    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("touchmove", onTouchMove);
+    window.addEventListener("touchend", onTouchEnd);
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowLeft") handleSwipe("left");
+      else if (event.key === "ArrowRight") handleSwipe("right");
+    });
 
     return () => {
-      window.removeEventListener('mousemove', handleGlobalMouseMove);
-      window.removeEventListener('mouseup', handleGlobalMouseUp);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("keydown", (event) => {
+        if (event.key === "ArrowLeft") handleSwipe("left");
+        else if (event.key === "ArrowRight") handleSwipe("right");
+      });
     };
-  }, [isDragging, dragOffset]);
+  }, [isDragging, dragOffset, currentIndex, matches, isAnimating]);
 
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navigation />
-        <div className="max-w-2xl mx-auto px-4 py-16">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-800 mb-4">Loading your matches...</h2>
-          </div>
+        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">
+            Loading your matches...
+          </h2>
         </div>
       </div>
     );
@@ -199,24 +170,12 @@ export default function Matches() {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navigation />
-        <div className="max-w-2xl mx-auto px-4 py-16">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-800 mb-4">No Matches Yet</h2>
-            <p className="text-slate-600 mb-8">Create a profile and generate matches to start swiping!</p>
-            <div className="space-x-4">
-              <Button onClick={() => window.location.href = '/profile'}>
-                Create Profile
-              </Button>
-              <Button variant="outline" onClick={() => {
-                apiRequest('POST', '/api/seed-data').then(() => {
-                  toast({ title: 'Sample Data Added', description: 'Check your dashboard for new opportunities!' });
-                  window.location.href = '/dashboard';
-                });
-              }}>
-                Add Sample Data
-              </Button>
-            </div>
-          </div>
+        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">No Matches Yet</h2>
+          <p className="text-slate-600 mb-8">
+            Update your profile or generate new matches to get started!
+          </p>
+          <Button onClick={handleGenerateMatches}>Generate Matches</Button>
         </div>
       </div>
     );
@@ -226,14 +185,16 @@ export default function Matches() {
     return (
       <div className="min-h-screen bg-slate-50">
         <Navigation />
-        <div className="max-w-2xl mx-auto px-4 py-16">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-800 mb-4">🎉 You've Reviewed All Matches!</h2>
-            <p className="text-slate-600 mb-8">Check your dashboard to see your favorited scholarships and start applying.</p>
-            <Button onClick={() => window.location.href = '/dashboard'}>
-              View Dashboard
-            </Button>
-          </div>
+        <div className="max-w-2xl mx-auto px-4 py-16 text-center">
+          <h2 className="text-2xl font-bold text-slate-800 mb-4">
+            🎉 You've Reviewed All Matches!
+          </h2>
+          <p className="text-slate-600 mb-8">
+            Check your dashboard to see your favorited scholarships and start applying.
+          </p>
+          <Button onClick={() => (window.location.href = "/dashboard")}>
+            View Dashboard
+          </Button>
         </div>
       </div>
     );
@@ -247,39 +208,42 @@ export default function Matches() {
       <Navigation />
 
       <div className="max-w-2xl mx-auto px-4 py-8">
-        {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-slate-800 mb-2">Disha Ai Scholarship Matches</h1>
+          <h1 className="text-3xl font-bold text-slate-800 mb-2">
+            Disha Ai Scholarship Matches
+          </h1>
           <p className="text-slate-600">
             Swipe right to save, left to pass • {currentIndex + 1} of {matches.length}
           </p>
           <div className="w-full bg-slate-200 rounded-full h-2 mt-4">
-            <div 
+            <div
               className="bg-primary h-2 rounded-full transition-all duration-300"
-              style={{ width: `${((currentIndex + 1) / matches.length) * 100}%` }}
+              style={{
+                width: `${((currentIndex + 1) / matches.length) * 100}%`,
+              }}
             />
           </div>
         </div>
 
-        {/* Swipe Card */}
         <div className="relative h-[600px] mb-8">
-          <Card 
+          <Card
             ref={cardRef}
-            className={`absolute inset-0 shadow-xl border-2 cursor-grab active:cursor-grabbing select-none ${
-              isAnimating 
-                ? 'transition-all duration-300 ease-out scale-95 opacity-0' 
-                : 'transition-transform duration-100 ease-out scale-100 opacity-100'
+            className={`absolute inset-0 shadow-xl border-2 select-none ${
+              isAnimating
+                ? "transition-all duration-300 ease-out scale-95 opacity-0"
+                : "transition-transform duration-100 ease-out scale-100 opacity-100"
             }`}
             style={{
               transform: `translateX(${dragOffset}px) rotate(${dragOffset * 0.05}deg)`,
-              opacity: isDragging ? Math.max(0.8, 1 - Math.abs(dragOffset) / 400) : 1,
-              transition: isDragging ? 'none' : 'transform 0.2s ease-out, opacity 0.2s ease-out',
+              opacity: isDragging
+                ? Math.max(0.8, 1 - Math.abs(dragOffset) / 400)
+                : 1,
+              transition: isDragging
+                ? "none"
+                : "transform 0.2s ease-out, opacity 0.2s ease-out",
             }}
-            data-testid={`card-scholarship-${scholarship.id}`}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
             onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
           >
             <CardHeader className="pb-4">
               <div className="flex items-start justify-between mb-4">
@@ -295,7 +259,10 @@ export default function Matches() {
                     <DollarSign className="w-5 h-5 mr-1" />
                     {scholarship.amount}
                   </div>
-                  <Badge variant="secondary" className="bg-primary/10 text-primary">
+                  <Badge
+                    variant="secondary"
+                    className="bg-primary/10 text-primary"
+                  >
                     {currentMatch.matchScore}% Match
                   </Badge>
                 </div>
@@ -303,45 +270,46 @@ export default function Matches() {
             </CardHeader>
 
             <CardContent className="space-y-6">
-              {/* Description */}
               <div>
                 <h3 className="font-semibold text-slate-800 mb-2">About</h3>
-                <p className="text-slate-600 leading-relaxed">{scholarship.description}</p>
+                <p className="text-slate-600 leading-relaxed">
+                  {scholarship.description}
+                </p>
               </div>
 
-              {/* Requirements */}
               <div>
                 <h3 className="font-semibold text-slate-800 mb-2">Requirements</h3>
                 <p className="text-slate-600">{scholarship.requirements}</p>
               </div>
 
-              {/* Details */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex items-center">
                   <Clock className="w-4 h-4 mr-2 text-slate-500" />
-                  <span className="text-sm text-slate-600">Deadline: {scholarship.deadline}</span>
+                  <span className="text-sm text-slate-600">
+                    Deadline: {scholarship.deadline}
+                  </span>
                 </div>
                 <div className="flex items-center">
                   <Star className="w-4 h-4 mr-2 text-slate-500" />
-                  <span className="text-sm text-slate-600 capitalize">{scholarship.type}</span>
+                  <span className="text-sm text-slate-600 capitalize">
+                    {scholarship.type}
+                  </span>
                 </div>
               </div>
 
-              {/* Tags */}
-              <div>
-                <div className="flex flex-wrap gap-2">
-                  {scholarship.tags.map((tag, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {tag}
-                    </Badge>
-                  ))}
-                </div>
+              <div className="flex flex-wrap gap-2">
+                {scholarship.tags.map((tag, index) => (
+                  <Badge key={index} variant="outline" className="text-xs">
+                    {tag}
+                  </Badge>
+                ))}
               </div>
 
-              {/* AI Reasoning */}
               {currentMatch.aiReasoning && (
                 <div className="bg-blue-50 p-4 rounded-lg">
-                  <h3 className="font-semibold text-blue-800 mb-2">🤖 Why This Matches You</h3>
+                  <h3 className="font-semibold text-blue-800 mb-2">
+                    🤖 Why This Matches You
+                  </h3>
                   <p className="text-blue-700 text-sm">{currentMatch.aiReasoning}</p>
                 </div>
               )}
@@ -349,15 +317,13 @@ export default function Matches() {
           </Card>
         </div>
 
-        {/* Action Buttons */}
         <div className="flex justify-center space-x-8">
           <Button
             size="lg"
             variant="outline"
             className="w-16 h-16 rounded-full border-red-300 hover:bg-red-50 hover:border-red-400 transition-all duration-200 hover:scale-110 active:scale-95"
-            onClick={() => handleSwipe('left')}
+            onClick={() => handleSwipe("left")}
             disabled={isAnimating}
-            data-testid="button-pass"
           >
             <X className="w-8 h-8 text-red-500" />
           </Button>
@@ -365,35 +331,11 @@ export default function Matches() {
           <Button
             size="lg"
             className="w-16 h-16 rounded-full bg-green-500 hover:bg-green-600 transition-all duration-200 hover:scale-110 active:scale-95"
-            onClick={() => handleSwipe('right')}
+            onClick={() => handleSwipe("right")}
             disabled={isAnimating}
-            data-testid="button-like"
           >
             <Heart className="w-8 h-8 text-white fill-white" />
           </Button>
-        </div>
-
-        {/* Swipe Indicators */}
-        {isDragging && (
-          <div className="fixed inset-0 pointer-events-none flex items-center justify-between px-8 z-10">
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
-              dragOffset < -50 ? 'bg-red-100 scale-110 shadow-lg' : 'bg-gray-100 scale-100'
-            }`}>
-              <X className={`w-8 h-8 transition-colors duration-200 ${dragOffset < -50 ? 'text-red-500' : 'text-gray-400'}`} />
-            </div>
-            <div className={`w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 ${
-              dragOffset > 50 ? 'bg-green-100 scale-110 shadow-lg' : 'bg-gray-100 scale-100'
-            }`}>
-              <Heart className={`w-8 h-8 transition-colors duration-200 ${dragOffset > 50 ? 'text-green-500 fill-green-500' : 'text-gray-400'}`} />
-            </div>
-          </div>
-        )}
-
-        {/* Interaction Hints */}
-        <div className="text-center mt-6">
-          <p className="text-sm text-slate-500">
-            Swipe or drag left to pass, right to save • Use keyboard: ← →
-          </p>
         </div>
       </div>
     </div>
