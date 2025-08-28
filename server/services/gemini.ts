@@ -86,7 +86,7 @@ Example of a valid JSON array:
     }
   } catch (err) {
     console.error("❌ Failed to parse Gemini response JSON:", err, text);
-    parsedMatches = [];
+    parsedMatches = []; 
   }
 
   // Fallback to a comprehensive default list if the AI fails
@@ -108,9 +108,6 @@ Example of a valid JSON array:
   }));
 }
 
-/**
- * Generate AI-based application guidance using Gemini
- */
 export async function generateApplicationGuidance(profile: StudentProfile, scholarship: Scholarship) {
   const prompt = `You are an application advisor AI.
 Student profile: ${JSON.stringify(profile, null, 2)}
