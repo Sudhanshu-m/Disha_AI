@@ -1,4 +1,3 @@
-// server/routes.ts
 import { Router } from "express";
 import fetch from "node-fetch";
 
@@ -23,7 +22,7 @@ async function fetchAIResponse(prompt: string): Promise<any> {
     }),
   });
 
-  const data = await response.json();
+  const data: any = await response.json(); // 👈 typed as any
   if (!data.choices || !data.choices[0]) {
     throw new Error("No AI response");
   }
@@ -49,7 +48,7 @@ router.get("/api/scholarships", async (req, res) => {
 
     let scholarships;
     try {
-      scholarships = JSON.parse(aiResponse); // if AI gave proper JSON
+      scholarships = JSON.parse(aiResponse); // if AI gave JSON
     } catch {
       scholarships = { raw: aiResponse }; // fallback: return raw text
     }
