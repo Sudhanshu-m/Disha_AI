@@ -61,7 +61,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.body.userId;
       if (!userId) return res.status(400).json({ message: "User ID is required" });
 
-      // Correct user creation logic
       let user = await db.query.users.findFirst({ where: eq(users.id, userId) });
       if (!user) {
           const newUserData: InsertUser = {
@@ -437,22 +436,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const allScholarships = await db.select().from(scholarships);
+      if (allScholarships.length === 0) {
+        return res.status(404).json({ message: "No scholarships found to match against." });
+      }
       
       const allAiMatches: any[] = [];
       for (const profile of allProfiles) {
         const aiMatches = await generateScholarshipMatches(profile, allScholarships);
-        for (const match of aiMatches) {
+        const validMatches = aiMatches.filter((m) =>
+          allScholarships.some((s) => String(s.id) === String(m.scholarshipId))
+        );
+        for (const match of validMatches) {
           const [savedMatch] = await db
             .insert(scholarshipMatches)
             .values({
               profileId: profile.id,
-              scholarshipId: match.scholarshipId,
+              scholarshipId: String(match.scholarshipId),
               matchScore: Number(match.matchScore) || 0,
               aiReasoning: match.aiReasoning,
+              status: "pending",
             })
             .returning();
-          
-          allAiMatches.push({ ...savedMatch, scholarship: match });
+          const scholarship = allScholarships.find(
+            (s) => String(s.id) === String(match.scholarshipId)
+          );
+          allAiMatches.push({ ...savedMatch, scholarship });
         }
       }
 
@@ -474,26 +482,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const allScholarships = await db.select().from(scholarships);
 
-      const enriched = matches.map((m) => ({
-        ...m,
-        scholarship: m.scholarshipId.startsWith("AI-Generated")
-          ? {
-              id: m.scholarshipId,
-              title: m.scholarshipTitle,
-              organization: m.scholarshipOrganization,
-              amount: m.scholarshipAmount,
-              deadline: m.scholarshipDeadline,
-              requirements: m.scholarshipRequirements,
-              tags: m.scholarshipTags,
-              type: m.scholarshipType,
-              eligibilityGpa: m.scholarshipEligibilityGpa,
-              eligibleFields: m.scholarshipEligibleFields,
-              eligibleLevels: m.scholarshipEligibleLevels,
-              description: m.scholarshipDescription,
-              isActive: true,
-            }
-          : allScholarships.find((s) => String(s.id) === String(m.scholarshipId)),
-      }));
+      const enriched = matches.map((m) => {
+        const scholarship = allScholarships.find(
+          (s) => String(s.id) === String(m.scholarshipId)
+        );
+        
+        return {
+          ...m,
+          scholarship: scholarship
+        }
+      });
 
       res.json(enriched);
     } catch (err) {
