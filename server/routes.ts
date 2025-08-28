@@ -9,7 +9,7 @@ import {
   users,
   insertStudentProfileSchema,
   type InsertScholarship,
-  type InsertUser
+  type InsertUser,
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import {
@@ -17,6 +17,7 @@ import {
   generateApplicationGuidance,
 } from "./services/gemini";
 
+// ✅ Helper to ensure values are stored correctly
 function ensureArray(val: unknown): string[] {
   if (!val) return [];
   if (Array.isArray(val)) return val.map(String);
@@ -60,12 +61,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.body.userId;
       if (!userId) return res.status(400).json({ message: "User ID is required" });
 
+      // Correct user creation logic: only use username and password
       let user = await db.query.users.findFirst({ where: eq(users.id, userId) });
       if (!user) {
           const newUserData: InsertUser = {
               username: userId,
-              email: profileData.email,
-              password: 'default_password'
+              password: 'default_password' // Use a safe default for now
           };
           [user] = await db.insert(users).values(newUserData).returning();
       }
