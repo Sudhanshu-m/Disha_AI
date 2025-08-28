@@ -86,7 +86,7 @@ Example of a valid JSON array:
     }
   } catch (err) {
     console.error("❌ Failed to parse Gemini response JSON:", err, text);
-    parsedMatches = []; 
+    parsedMatches = [];
   }
 
   if (parsedMatches.length === 0 && scholarships.length > 0) {
