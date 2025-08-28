@@ -60,7 +60,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.body.userId;
       if (!userId) return res.status(400).json({ message: "User ID is required" });
 
-      let user = await db.query.users.findFirst({ where: eq(users.id, userId) });
+      // Corrected user creation logic to use username and a default password
+      let user = await db.query.users.findFirst({ where: eq(users.username, userId) });
       if (!user) {
           const newUserData: InsertUser = {
               username: userId,
