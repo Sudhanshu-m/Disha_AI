@@ -482,16 +482,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const allScholarships = await db.select().from(scholarships);
 
-      const enriched = matches.map((m) => {
-        const scholarship = allScholarships.find(
+      const enriched = matches.map((m) => ({
+        ...m,
+        scholarship: allScholarships.find(
           (s) => String(s.id) === String(m.scholarshipId)
-        );
-        
-        return {
-          ...m,
-          scholarship: scholarship
-        }
-      });
+        ),
+      }));
 
       res.json(enriched);
     } catch (err) {
