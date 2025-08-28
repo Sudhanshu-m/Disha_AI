@@ -64,7 +64,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
           const newUserData: InsertUser = {
               id: userId,
-              email: profileData.email,
+              username: profileData.email,
+              password: "temp-password"
           };
           [user] = await db.insert(users).values(newUserData).returning();
       }
