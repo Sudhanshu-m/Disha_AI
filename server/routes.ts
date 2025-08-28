@@ -9,7 +9,7 @@ import {
   users,
   insertStudentProfileSchema,
   type InsertScholarship,
-  type InsertUser
+  type InsertUser,
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import {
@@ -434,36 +434,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (allProfiles.length === 0) {
         return res.status(404).json({ message: "No profiles found to generate matches for." });
       }
-      
-      const allScholarships = await db.select().from(scholarships);
-      if (allScholarships.length === 0) {
-        return res.status(404).json({ message: "No scholarships found to match against." });
-      }
-      
+
       const allAiMatches: any[] = [];
       for (const profile of allProfiles) {
-        // Pass all scholarships to the AI for matching
-        const aiMatches = await generateScholarshipMatches(profile, allScholarships);
-        
+        const aiMatches = await generateScholarshipMatches(profile);
         for (const match of aiMatches) {
-          // Check if the scholarshipId from the AI exists in the database
-          const existingScholarship = allScholarships.find((s) => String(s.id) === String(match.scholarshipId));
-          if (existingScholarship) {
-            const [savedMatch] = await db
-              .insert(scholarshipMatches)
-              .values({
-                profileId: profile.id,
-                scholarshipId: String(match.scholarshipId),
-                matchScore: Number(match.matchScore) || 0,
-                aiReasoning: match.aiReasoning,
-                status: "pending",
-              })
-              .returning();
-            allAiMatches.push({ ...savedMatch, scholarship: existingScholarship });
-          }
+          const [savedMatch] = await db
+            .insert(scholarshipMatches)
+            .values({
+              profileId: profile.id,
+              scholarshipId: match.scholarshipId,
+              matchScore: Number(match.matchScore) || 0,
+              aiReasoning: match.aiReasoning,
+            })
+            .returning();
+          
+          allAiMatches.push({ ...savedMatch, scholarship: match });
         }
       }
-      
+
       res.json({ matches: allAiMatches });
     } catch (err) {
       console.error("Error generating matches:", err);
@@ -480,14 +469,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(scholarshipMatches.profileId, req.params.profileId))
         .orderBy(desc(scholarshipMatches.matchScore));
 
-      const allScholarships = await db.select().from(scholarships);
-
-      const enriched = matches.map((m) => ({
-        ...m,
-        scholarship: allScholarships.find(
-          (s) => String(s.id) === String(m.scholarshipId)
-        ),
-      }));
+      const enriched = matches.map((m) => {
+        // This object 'm' only contains data from the 'scholarshipMatches' table
+        // We need to retrieve the scholarship details from the 'scholarships' table
+        const scholarshipDetails = m.scholarshipId.startsWith("fallback-match")
+          ? {
+              id: m.scholarshipId,
+              title: "Fallback Title", // Use a default for fallbacks
+              organization: "Fallback Organization",
+              amount: "₹0",
+              deadline: "N/A",
+              requirements: "N/A",
+              tags: ["Fallback"],
+              type: "fallback",
+              eligibilityGpa: "N/A",
+              eligibleFields: ["N/A"],
+              eligibleLevels: ["N/A"],
+              description: "This is a default scholarship provided when the AI could not find a match.",
+              isActive: false,
+            }
+          : {
+              id: m.scholarshipId,
+              title: m.scholarshipTitle,
+              organization: m.scholarshipOrganization,
+              amount: m.scholarshipAmount,
+              deadline: m.scholarshipDeadline,
+              requirements: m.scholarshipRequirements,
+              tags: m.scholarshipTags,
+              type: m.scholarshipType,
+              eligibilityGpa: m.scholarshipEligibilityGpa,
+              eligibleFields: m.scholarshipEligibleFields,
+              eligibleLevels: m.scholarshipEligibleLevels,
+              description: m.scholarshipDescription,
+              isActive: true,
+          };
+          
+          return {
+            ...m,
+            scholarship: scholarshipDetails
+          }
+      });
 
       res.json(enriched);
     } catch (err) {
