@@ -9,7 +9,7 @@ import {
   users,
   insertStudentProfileSchema,
   type InsertScholarship,
-  type InsertUser
+  type InsertUser,
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import {
@@ -17,6 +17,7 @@ import {
   generateApplicationGuidance,
 } from "./services/gemini";
 
+// ✅ Helper to ensure values are stored correctly
 function ensureArray(val: unknown): string[] {
   if (!val) return [];
   if (Array.isArray(val)) return val.map(String);
@@ -60,12 +61,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.body.userId;
       if (!userId) return res.status(400).json({ message: "User ID is required" });
 
-      let user = await db.query.users.findFirst({ where: eq(users.username, userId) });
+      // Correct user creation logic
+      let user = await db.query.users.findFirst({ where: eq(users.id, userId) });
       if (!user) {
           const newUserData: InsertUser = {
-              username: userId,
+              id: userId,
               email: profileData.email,
-              password: 'default_password'
           };
           [user] = await db.insert(users).values(newUserData).returning();
       }
@@ -557,7 +558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .insert(applicationGuidance)
         .values({
           profileId: String(profileId),
-          scholarshipId: String(scholarshipId),
+          scholarshipId: String(guidance.scholarshipId),
           essayTips: ensureArray(guidance.essayTips),
           checklist: ensureArray(guidance.checklist),
           improvementSuggestions: ensureArray(guidance.improvementSuggestions),
