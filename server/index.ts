@@ -1,5 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
-import { registerRoutes } from "./routes";
+import router from "./routes";   // ✅ import default router instead of { registerRoutes }
 import { setupVite, serveStatic, log } from "./vite";
 import "dotenv/config"; // ensures .env variables are loaded
 
@@ -45,29 +45,31 @@ app.use((req, res, next) => {
   next();
 });
 
+// ✅ Attach API routes
+app.use("/api", router);
+
+// Error handler
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const status = err.status || err.statusCode || 500;
+  const message = err.message || "Internal Server Error";
+
+  res.status(status).json({ message });
+  console.error("[SERVER ERROR]", err);
+});
+
+// Start server
 (async () => {
-  const server = await registerRoutes(app);
+  const port = parseInt(process.env.PORT || "5000", 10);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    console.error("[SERVER ERROR]", err);
-  });
-
-  // Setup frontend
   if (app.get("env") === "development") {
-    await setupVite(app, server);
+    const server = await setupVite(app);
+    server.listen(port, "0.0.0.0", () => {
+      log(`🚀 Serving (dev) on http://localhost:${port}`);
+    });
   } else {
     serveStatic(app);
+    app.listen(port, "0.0.0.0", () => {
+      log(`🚀 Serving (prod) on http://localhost:${port}`);
+    });
   }
-
-  const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen(
-    { port, host: "0.0.0.0" }, // 👈 change from "localhost" so it's reachable in all environments
-    () => {
-      log(`🚀 Serving on http://localhost:${port}`);
-    }
-  );
 })();
