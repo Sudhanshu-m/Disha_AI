@@ -63,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let user = await db.query.users.findFirst({ where: eq(users.id, userId) });
       if (!user) {
           const newUserData: InsertUser = {
-              id: userId,
+              username: userId,
               email: profileData.email,
               password: 'default_password'
           };
