@@ -89,7 +89,6 @@ Example of a valid JSON array:
     parsedMatches = []; 
   }
 
-  // Fallback to a comprehensive default list if the AI fails
   if (parsedMatches.length === 0 && scholarships.length > 0) {
     console.log("⚠️ AI returned no matches. Providing fallback matches for all scholarships.");
     return scholarships.map((s) => ({
