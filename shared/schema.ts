@@ -102,10 +102,7 @@ export const applicationGuidance = pgTable("application_guidance", {
 /**
  * Zod Schemas for Validation
  */
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-});
+export const insertUserSchema = createInsertSchema(users);
 
 export const insertStudentProfileSchema = createInsertSchema(
   studentProfiles
