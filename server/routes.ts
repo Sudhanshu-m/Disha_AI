@@ -1,131 +1,125 @@
-import express from "express"
-import crypto from "crypto"
-import { db } from "../db"
-import { profiles, scholarships, matches } from "../db/schema"
-import { eq } from "drizzle-orm"
-import { GoogleGenerativeAI } from "@google/generative-ai"
+import { Router, type Request, type Response } from "express";
+import { db } from "../db"; // adjust path if needed
+import { scholarships } from "../db/schema"; // adjust path if needed
+import { eq } from "drizzle-orm";
+import fetch from "node-fetch";
 
-const router = express.Router()
+const router = Router();
 
-// Gemini client setup
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_KEY as string)
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+// 🎓 Scholarship type
+interface Scholarship {
+  id?: number;
+  name: string;
+  description: string;
+  eligibility: string;
+  deadline: string;
+  link: string;
+}
 
-// ------------------- PROFILE ROUTES -------------------
+// ✅ Health check
+router.get("/health", (_req: Request, res: Response) => {
+  res.json({ status: "ok" });
+});
 
-router.get("/profile/:userId", async (req, res) => {
+// ✅ Get all scholarships
+router.get("/scholarships", async (_req: Request, res: Response) => {
   try {
-    const profile = await db.query.profiles.findFirst({
-      where: eq(profiles.userId, req.params.userId),
-    })
-
-    if (!profile) {
-      return res.status(404).json({ message: "Profile not found" })
-    }
-
-    res.json(profile)
-  } catch (error) {
-    console.error("Error fetching profile:", error)
-    res.status(500).json({ message: "Error fetching profile" })
+    const result: Scholarship[] = await db.select().from(scholarships);
+    res.json(result);
+  } catch (err) {
+    console.error("[ERROR] fetching scholarships", err);
+    res.status(500).json({ message: "Failed to fetch scholarships" });
   }
-})
+});
 
-router.post("/profile", async (req, res) => {
+// ✅ Get scholarship by ID
+router.get("/scholarships/:id", async (req: Request, res: Response) => {
   try {
-    const newProfile = {
-      id: crypto.randomUUID(),
-      ...req.body,
+    const id = Number(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+
+    const result: Scholarship[] = await db
+      .select()
+      .from(scholarships)
+      .where(eq(scholarships.id, id));
+
+    if (result.length === 0) {
+      return res.status(404).json({ message: "Scholarship not found" });
     }
 
-    await db.insert(profiles).values(newProfile)
-
-    res.status(201).json(newProfile)
-  } catch (error) {
-    console.error("Error creating profile:", error)
-    res.status(500).json({ message: "Error creating profile" })
+    res.json(result[0]);
+  } catch (err) {
+    console.error("[ERROR] fetching scholarship by id", err);
+    res.status(500).json({ message: "Failed to fetch scholarship" });
   }
-})
+});
 
-// ------------------- MATCHING ROUTE -------------------
-
-router.post("/matches/generate", async (req, res) => {
+// ✅ Add scholarship manually
+router.post("/scholarships", async (req: Request, res: Response) => {
   try {
-    const { profileId } = req.body
+    const { name, description, eligibility, deadline, link } =
+      req.body as Scholarship;
 
-    const profile = await db.query.profiles.findFirst({
-      where: eq(profiles.id, profileId),
-    })
-
-    if (!profile) {
-      return res.status(404).json({ message: "Profile not found" })
+    if (!name || !description || !eligibility || !deadline || !link) {
+      return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Check if scholarships already exist
-    const existingScholarships = await db.select().from(scholarships)
+    const [inserted] = await db
+      .insert(scholarships)
+      .values({ name, description, eligibility, deadline, link })
+      .returning();
 
-    let scholarshipList = existingScholarships
+    res.status(201).json(inserted);
+  } catch (err) {
+    console.error("[ERROR] adding scholarship", err);
+    res.status(500).json({ message: "Failed to add scholarship" });
+  }
+});
 
-    if (scholarshipList.length === 0) {
-      console.log("⚡ No scholarships found in DB. Fetching from AI...")
+// ✅ AI-powered scholarship fetch
+router.get("/scholarships/ai", async (_req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!apiKey) {
+      return res
+        .status(500)
+        .json({ message: "Missing Gemini/Google API key in env" });
+    }
 
-      // Ask Gemini to suggest scholarships
-      const prompt = `Suggest 5 real scholarships for a student with the following profile:
-      Name: ${profile.name}
-      Age: ${profile.age}
-      Education: ${profile.education}
-      Interests: ${profile.interests}
-      Location: ${profile.location}
-      Return as JSON array with fields: name, eligibility, deadline.`
+    const prompt = `
+      List 5 current scholarships for Indian students in 2025.
+      Return strictly in JSON array format:
+      [
+        { "name": "...", "description": "...", "eligibility": "...", "deadline": "...", "link": "..." }
+      ]
+    `;
 
-      const result = await model.generateContent(prompt)
-      const text = result.response.text()
-
-      let aiScholarships: any[] = []
-      try {
-        aiScholarships = JSON.parse(text)
-      } catch (err) {
-        console.error("AI response parsing failed:", err, text)
-        return res.status(500).json({ message: "AI did not return valid scholarships" })
+    const aiResponse = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=" +
+        apiKey,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       }
+    );
 
-      // Save AI scholarships into DB
-      const formatted = aiScholarships.map((s) => ({
-        id: crypto.randomUUID(),
-        name: s.name,
-        eligibility: s.eligibility,
-        deadline: s.deadline ? new Date(s.deadline) : null,
-      }))
+    const data = await aiResponse.json();
+    let scholarshipsList: Scholarship[] = [];
 
-      await db.insert(scholarships).values(formatted)
-
-      scholarshipList = formatted
+    try {
+      const rawText =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+      scholarshipsList = JSON.parse(rawText) as Scholarship[];
+    } catch (err) {
+      console.error("[ERROR] parsing AI response", err);
     }
 
-    // Naive matching: filter by education or interests
-    const matchesForProfile = scholarshipList.filter((s) => {
-      const eligibility = (s.eligibility || "").toLowerCase()
-      return (
-        eligibility.includes(profile.education?.toLowerCase() || "") ||
-        eligibility.includes(profile.interests?.toLowerCase() || "")
-      )
-    })
-
-    // Save matches
-    const matchRecords = matchesForProfile.map((s) => ({
-      id: crypto.randomUUID(),
-      profileId: profile.id,
-      scholarshipId: s.id,
-    }))
-
-    if (matchRecords.length > 0) {
-      await db.insert(matches).values(matchRecords)
-    }
-
-    res.json(matchesForProfile)
-  } catch (error) {
-    console.error("Error generating matches:", error)
-    res.status(500).json({ message: "Error generating matches" })
+    res.json(scholarshipsList);
+  } catch (err) {
+    console.error("[ERROR] fetching AI scholarships", err);
+    res.status(500).json({ message: "Failed to fetch AI scholarships" });
   }
-})
+});
 
-export default router
+export default router;
