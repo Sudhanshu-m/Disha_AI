@@ -9,7 +9,7 @@ import {
   users,
   insertStudentProfileSchema,
   type InsertScholarship,
-  type InsertUser,
+  type InsertUser
 } from "@shared/schema";
 import { eq, and, desc } from "drizzle-orm";
 import {
@@ -437,6 +437,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const allAiMatches: any[] = [];
       for (const profile of allProfiles) {
+        // Here we call the generate function with just the profile
         const aiMatches = await generateScholarshipMatches(profile);
         for (const match of aiMatches) {
           const [savedMatch] = await db
@@ -469,45 +470,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(eq(scholarshipMatches.profileId, req.params.profileId))
         .orderBy(desc(scholarshipMatches.matchScore));
 
+      const allScholarships = await db.select().from(scholarships);
+
       const enriched = matches.map((m) => {
-        // This object 'm' only contains data from the 'scholarshipMatches' table
-        // We need to retrieve the scholarship details from the 'scholarships' table
-        const scholarshipDetails = m.scholarshipId.startsWith("fallback-match")
-          ? {
-              id: m.scholarshipId,
-              title: "Fallback Title", // Use a default for fallbacks
-              organization: "Fallback Organization",
-              amount: "₹0",
-              deadline: "N/A",
-              requirements: "N/A",
-              tags: ["Fallback"],
-              type: "fallback",
-              eligibilityGpa: "N/A",
-              eligibleFields: ["N/A"],
-              eligibleLevels: ["N/A"],
-              description: "This is a default scholarship provided when the AI could not find a match.",
-              isActive: false,
-            }
-          : {
-              id: m.scholarshipId,
-              title: m.scholarshipTitle,
-              organization: m.scholarshipOrganization,
-              amount: m.scholarshipAmount,
-              deadline: m.scholarshipDeadline,
-              requirements: m.scholarshipRequirements,
-              tags: m.scholarshipTags,
-              type: m.scholarshipType,
-              eligibilityGpa: m.scholarshipEligibilityGpa,
-              eligibleFields: m.scholarshipEligibleFields,
-              eligibleLevels: m.scholarshipEligibleLevels,
-              description: m.scholarshipDescription,
-              isActive: true,
-          };
+        const scholarship = allScholarships.find(
+          (s) => String(s.id) === String(m.scholarshipId)
+        );
           
-          return {
-            ...m,
-            scholarship: scholarshipDetails
-          }
+        return {
+          ...m,
+          scholarship: scholarship
+        }
       });
 
       res.json(enriched);
