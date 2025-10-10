@@ -1,0 +1,57 @@
+[
+  {
+    "id": "1",
+    "title": "STEM Excellence Scholarship",
+    "organization": "Tech Foundation",
+    "description": "Scholarship for outstanding students pursuing STEM fields, rewarding academic excellence and innovation.",
+    "amount": "₹50,000",
+    "requirements": "GPA 3.5+ in STEM major, active in research or projects",
+    "deadline": "2025-12-31",
+    "type": "Merit-based",
+    "tags": ["STEM", "Merit", "Innovation"]
+  },
+  {
+    "id": "2",
+    "title": "Arts Creativity Scholarship",
+    "organization": "Arts Guild",
+    "description": "Award for students excelling in creative arts, including painting, music, and performing arts.",
+    "amount": "₹30,000",
+    "requirements": "Portfolio submission required, active participation in arts events",
+    "deadline": "2025-11-15",
+    "type": "Creative",
+    "tags": ["Arts", "Creativity", "Portfolio"]
+  },
+  {
+    "id": "3",
+    "title": "Leadership Development Grant",
+    "organization": "Future Leaders Institute",
+    "description": "Supports students showing leadership skills in academics, community service, or student organizations.",
+    "amount": "₹40,000",
+    "requirements": "Evidence of leadership roles, recommendation letter",
+    "deadline": "2025-10-31",
+    "type": "Leadership",
+    "tags": ["Leadership", "Community", "Service"]
+  },
+  {
+    "id": "4",
+    "title": "Sports Achievement Scholarship",
+    "organization": "National Sports Council",
+    "description": "Awarded to students with notable achievements in sports at the regional or national level.",
+    "amount": "₹25,000",
+    "requirements": "Participation in state/national competitions, recommendation from coach",
+    "deadline": "2025-09-30",
+    "type": "Sports",
+    "tags": ["Sports", "Athlete", "Performance"]
+  },
+  {
+    "id": "5",
+    "title": "Women in Technology Scholarship",
+    "organization": "Tech for Her",
+    "description": "Encourages female students to pursue careers in technology and computer science.",
+    "amount": "₹60,000",
+    "requirements": "Female student, enrollment in tech-related degree, passion for innovation",
+    "deadline": "2025-12-15",
+    "type": "Diversity",
+    "tags": ["Women", "Technology", "STEM"]
+  }
+]
