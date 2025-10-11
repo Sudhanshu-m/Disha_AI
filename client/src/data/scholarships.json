@@ -53,5 +53,115 @@
     "deadline": "2025-12-15",
     "type": "Diversity",
     "tags": ["Women", "Technology", "STEM"]
+  },
+  {
+    "id": "6",
+    "title": "National Need-Based Scholarship",
+    "organization": "Government of India",
+    "description": "Supports students from economically weaker backgrounds.",
+    "amount": "₹40,000",
+    "requirements": "Annual family income < ₹5,00,000",
+    "deadline": "2025-11-30",
+    "type": "need-based",
+    "tags": ["need-based", "financial"]
+  },
+  {
+    "id": "7",
+    "title": "Sports Excellence Scholarship",
+    "organization": "Youth Sports Federation",
+    "description": "Rewarding talented athletes pursuing higher education.",
+    "amount": "₹60,000",
+    "requirements": "National/state level participation",
+    "deadline": "2025-10-15",
+    "type": "athletic",
+    "tags": ["sports", "athletic"]
+  },
+  {
+    "id": "8",
+    "title": "Minority Education Grant",
+    "organization": "Minority Affairs Ministry",
+    "description": "For students belonging to minority communities.",
+    "amount": "₹30,000",
+    "requirements": "Belonging to recognized minority",
+    "deadline": "2025-12-15",
+    "type": "minority",
+    "tags": ["minority", "community"]
+  },
+  {
+    "id": "9",
+    "title": "STEM Women Scholarship",
+    "organization": "TechWomen Foundation",
+    "description": "Encouraging women in STEM fields.",
+    "amount": "₹75,000",
+    "requirements": "Female students in STEM programs",
+    "deadline": "2025-11-20",
+    "type": "merit-based",
+    "tags": ["women", "STEM"]
+  },
+  {
+    "id": "10",
+    "title": "Creative Arts Scholarship",
+    "organization": "Arts Council of India",
+    "description": "Supports students pursuing visual and performing arts.",
+    "amount": "₹25,000",
+    "requirements": "Portfolio submission required",
+    "deadline": "2025-09-30",
+    "type": "merit-based",
+    "tags": ["arts", "creative"]
+  },
+  {
+    "id": "11",
+    "title": "Engineering Merit Award",
+    "organization": "Engineering Students Association",
+    "description": "Merit award for top engineering students.",
+    "amount": "₹50,000",
+    "requirements": "Top 10% of class",
+    "deadline": "2025-12-01",
+    "type": "merit-based",
+    "tags": ["engineering", "merit"]
+  },
+  {
+    "id": "12",
+    "title": "Rural Talent Scholarship",
+    "organization": "Rural Development Trust",
+    "description": "Supports talented students from rural areas.",
+    "amount": "₹35,000",
+    "requirements": "Must reside in rural area",
+    "deadline": "2025-10-31",
+    "type": "need-based",
+    "tags": ["rural", "community"]
+  },
+  {
+    "id": "13",
+    "title": "Science Research Grant",
+    "organization": "National Science Council",
+    "description": "For students conducting innovative research projects.",
+    "amount": "₹80,000",
+    "requirements": "Submit research proposal",
+    "deadline": "2025-12-10",
+    "type": "merit-based",
+    "tags": ["research", "science"]
+  },
+  {
+    "id": "14",
+    "title": "Leadership Scholarship",
+    "organization": "Future Leaders Forum",
+    "description": "Supports students showing exceptional leadership skills.",
+    "amount": "₹45,000",
+    "requirements": "Leadership roles in school/college",
+    "deadline": "2025-11-05",
+    "type": "merit-based",
+    "tags": ["leadership", "extracurricular"]
+  },
+  {
+    "id": "15",
+    "title": "Technology Innovators Grant",
+    "organization": "Innovate India Foundation",
+    "description": "For students creating innovative tech solutions.",
+    "amount": "₹70,000",
+    "requirements": "Must submit project prototype",
+    "deadline": "2025-12-20",
+    "type": "merit-based",
+    "tags": ["technology", "innovation"]
   }
 ]

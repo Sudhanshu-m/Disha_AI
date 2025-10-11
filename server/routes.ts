@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { generateScholarshipMatches, generateApplicationGuidance } from "./services/gemini";
+import { generateScholarshipMatches} from "./services/gemini";
 
 // ========== TEMPORARY IN-MEMORY DATA (NO DB) ==========
 interface User {
@@ -279,35 +279,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         updatedAt: new Date(),
       };
 
-      let guidance;
-      try {
-        // Map scholarship to expected structure
-        const mappedScholarship = {
-          id: scholarship.id,
-          title: scholarship.title,
-          organization: scholarship.organization,
-          amount: scholarship.amount,
-          deadline: "", // Placeholder, as not present in mock
-          description: scholarship.description,
-          requirements: "", // Placeholder, as not present in mock
-          tags: scholarship.tags,
-          type: "", // Placeholder, as not present in mock
-          eligibilityGpa: null, // Placeholder, as not present in mock
-          eligibleFields: null, // Placeholder, as not present in mock
-          eligibleLevels: null, // Placeholder, as not present in mock
-          isActive: true, // Placeholder, as not present in mock
-          createdAt: new Date(), // Placeholder, as not present in mock
-        };
-        guidance = await generateApplicationGuidance(mappedProfile, mappedScholarship);
-      } catch {
-        guidance = {
-          essayTips: ["Be concise", "Show your motivation"],
-          checklist: ["Fill form", "Upload docs", "Submit essay"],
-          improvementSuggestions: ["Highlight leadership", "Proofread grammar"],
-        };
-      }
-
-      res.json({ profileId, scholarshipId, ...guidance });
+      
+      res.json({ profileId, scholarshipId });
     } catch (err) {
       console.error("Error generating guidance:", err);
       res.status(500).json({ message: "Failed to generate guidance" });
